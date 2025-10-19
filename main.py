@@ -55,6 +55,7 @@ def _parser(formula):
     formula = formula.strip().replace(' ', '')
     conjunctions = formula.split('},')
     output = []
+
     for conjunction in conjunctions:
         disjunction = conjunction.strip().strip('{').strip('}').split(',')
         output.append(disjunction)
@@ -74,13 +75,13 @@ def main():
     parser = argparse.ArgumentParser("sat solver")
 
     parser.add_argument(
-        "formula",
+        'formula',
         nargs=argparse.REMAINDER,
-        help="",
+        help='e.g. {{-a, b}, {-v, r, q}}',
     )
 
     args = parser.parse_args()
-    formula = " ".join(args.formula)
+    formula = ' '.join(args.formula)
     parsed = _parser(formula)
     print(f'Solving: {parsed}')
 

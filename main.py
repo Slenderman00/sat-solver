@@ -5,6 +5,16 @@ class Conjunction:
     def __init__(self):
         self.children = []
 
+    def get_all(self):
+        population = []
+        for child in self.children:
+            population.append(child.get_all())
+
+        return population
+
+    def simplify(self):
+        pass
+
     def __str__(self):
         res = ''
         for i, child in enumerate(self.children):
@@ -20,6 +30,15 @@ class Disjunction:
     def __init__(self):
         self.children = []
 
+    def get_all(self):
+        return self.children
+
+    def simplify(self):
+        for child in children:
+            for other in children:
+                if child.is_negative_of(other):
+                    print("allways true")
+
     def __str__(self):
         res = ''
         for i, child in enumerate(self.children):
@@ -28,7 +47,7 @@ class Disjunction:
             else:
                 res += f'{str(child)} or '
 
-        return f'{res}'
+        return f'({res})'
 
 class Literal:
     def __init__(self, value):
@@ -37,6 +56,11 @@ class Literal:
         self.negated = None
 
         self.parse()
+
+    is_negative_of(self, other):
+        if other.value == self.value and other.negated != self.negated:
+            return True
+        return False
 
     def parse(self):
         if '-' in self.value:

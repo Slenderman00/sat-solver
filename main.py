@@ -13,7 +13,8 @@ class Conjunction:
         return population
 
     def simplify(self):
-        pass
+        for child in self.children:
+            child.simplify()
 
     def __str__(self):
         res = ''
@@ -29,17 +30,20 @@ class Conjunction:
 class Disjunction:
     def __init__(self):
         self.children = []
+        self.always_true = False
 
     def get_all(self):
         return self.children
 
     def simplify(self):
-        for child in children:
-            for other in children:
+        for child in self.children:
+            for other in self.children:
                 if child.is_negative_of(other):
-                    print("allways true")
+                    self.always_true = True
 
     def __str__(self):
+        if self.always_true:
+            return '(True)'
         res = ''
         for i, child in enumerate(self.children):
             if i == len(self.children) - 1:
@@ -57,7 +61,7 @@ class Literal:
 
         self.parse()
 
-    is_negative_of(self, other):
+    def is_negative_of(self, other):
         if other.value == self.value and other.negated != self.negated:
             return True
         return False
@@ -108,6 +112,10 @@ def main():
     formula = ' '.join(args.formula)
     parsed = _parser(formula)
     print(f'Solving: {parsed}')
+
+    parsed.simplify()
+
+    print(parsed)
 
 
 if __name__ == "__main__":

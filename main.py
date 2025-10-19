@@ -72,7 +72,7 @@ def _parser(formula):
     return _conjunction
 
 def main():
-    parser = argparse.ArgumentParser("sat solver")
+    parser = argparse.ArgumentParser("SAT Solver")
 
     parser.add_argument(
         'formula',

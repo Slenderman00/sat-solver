@@ -8,7 +8,8 @@ class Conjunction:
     def get_all(self):
         population = []
         for child in self.children:
-            population.append(child.get_all())
+            if not child.always_true:
+                population.append(child.get_all())
 
         return population
 

@@ -47,6 +47,9 @@ class Conjunction:
         for child in self.children:
             child.propagate_clauses(clauses)
 
+    def find_conflict(self):
+        return any(getattr(l, "conflict", False) for l in self.unit_clauses + self.backtracing_clauses)
+
     def check_values(self):
         for child in self.children:
             child.check_values()
@@ -81,10 +84,10 @@ class Disjunction:
 
     def set_value(self, value):
         for child in self.children:
-            child.set_value(value)
+            child.set_value(value ^ child.negated)
 
     def set_value_return_literal(self, value):
-        self.children[0].set_value(value)
+        self.children[0].set_value(value ^ self.children[0].negated)
         return self.children[0]
 
     def simplify(self):
@@ -120,7 +123,8 @@ class Literal:
     def __init__(self, name):
         self.variable_value = None
         self.name = name
-        self.negated = None
+        self.negated = False
+        self.conflict = False
 
         self.parse()
 
@@ -141,6 +145,9 @@ class Literal:
     def propagate_clauses(self, clauses):
         for literal in clauses:
             if literal == self:
+                if (self.variable_value is not None and self.variable_value != literal.variable_value):
+                    self.conflict = True
+                    return
                 self.variable_value = literal.variable_value
 
     def parse(self):
@@ -216,6 +223,11 @@ def main():
         print("After Processing Unit Clauses:")
         print(parsed)
         print("-" * 50)
+
+        if parsed.find_conflict():
+            print("UNSATISFIABLE!")
+            break
+
         # Clean after processing unit clauses
         parsed.clean()
         print("After Cleaning (Post-Unit Clauses):")
@@ -243,6 +255,11 @@ def main():
         print("After Backtracking:")
         print(parsed)
         print("-" * 50)
+
+        if parsed.find_conflict():
+            print("UNSATISFIABLE!")
+            break
+
         # Clean after backtracking
         parsed.clean()
         print("After Cleaning (Post-Backtracking):")

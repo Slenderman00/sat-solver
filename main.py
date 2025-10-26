@@ -1,4 +1,5 @@
 import argparse
+import copy
 
 # and
 class Conjunction:
@@ -6,13 +7,13 @@ class Conjunction:
         self.children = []
         self.unit_clauses = []
         self.backtracing_clauses = []
+        self._stack = []
 
     def get_all(self):
         population = []
         for child in self.children:
             if not child.always_true:
                 population.append(child.get_all())
-
         return population
 
     def get_falsifiable_children(self):
@@ -31,17 +32,51 @@ class Conjunction:
             child.simplify()
 
     def process_unit_clauses(self):
+        self.unit_clauses = []
         for child in self.children:
             if child.is_unit_clause():
                 child.set_value(True)
                 child.check_values()
                 self.unit_clauses.append(child.children[0])
-
         self.propagate_clauses(self.unit_clauses)
 
+    def _pick_clause_index(self):
+        for i, child in enumerate(self.children):
+            if not getattr(child, "always_true", False) and len(child.children) > 0:
+                return i
+        return None
+
     def backtracing(self):
-        self.backtracing_clauses.append(self.children[0].set_value_return_literal(True))
+        idx = self._pick_clause_index()
+        if idx is None:
+            return
+        self._stack.append({"snap": copy.deepcopy(self), "idx": idx, "flipped": False})
+        self.backtracing_clauses = []
+        chosen = self.children[idx].set_value_return_literal(True)
+        self.backtracing_clauses.append(chosen)
         self.propagate_clauses(self.backtracing_clauses)
+
+    def try_flip_last(self):
+        while self._stack:
+            frame = self._stack[-1]
+            if not frame["flipped"]:
+                restored = copy.deepcopy(frame["snap"])
+                self.__dict__ = restored.__dict__
+                frame["flipped"] = True
+                self.backtracing_clauses = []
+                idx = frame["idx"]
+                if idx is None or idx >= len(self.children) or getattr(self.children[idx], "always_true", False) or len(self.children[idx].children) == 0:
+                    idx = self._pick_clause_index()
+                    frame["idx"] = idx
+                    if idx is None:
+                        return True
+                chosen = self.children[idx].set_value_return_literal(False)
+                self.backtracing_clauses.append(chosen)
+                self.propagate_clauses(self.backtracing_clauses)
+                return True
+            else:
+                self._stack.pop()
+        return False
 
     def propagate_clauses(self, clauses):
         for child in self.children:
@@ -61,7 +96,6 @@ class Conjunction:
                 res += f'{str(child)}'
             else:
                 res += f'{str(child)}, '
-
         return f'{{{res}}}'
 
 # or
@@ -106,7 +140,6 @@ class Disjunction:
         for child in self.children:
             child.propagate_clauses(clauses)
 
-
     def __str__(self):
         if self.always_true:
             return '{True}'
@@ -116,7 +149,6 @@ class Disjunction:
                 res += f'{str(child)}'
             else:
                 res += f'{str(child)}, '
-
         return f'{{{res}}}'
 
 class Literal:
@@ -125,7 +157,6 @@ class Literal:
         self.name = name
         self.negated = False
         self.conflict = False
-
         self.parse()
 
     @property
@@ -151,21 +182,16 @@ class Literal:
                 self.variable_value = literal.variable_value
 
     def parse(self):
-        if '-' in self.name:
+        n = self.name.strip()
+        if n.startswith('-'):
             self.negated = True
-            self.name = self.name.strip('-')
+            n = n[1:]
+        self.name = n
 
     def __str__(self):
         if self.value is not None:
-            if self.value:
-                return 'True'
-            else:
-                return 'False'
-
-        if self.negated:
-            return f'-{self.name}'
-        else:
-            return self.name
+            return 'True' if self.value else 'False'
+        return f'-{self.name}' if self.negated else self.name
 
     def __eq__(self, other):
         return self.name == other.name
@@ -174,20 +200,16 @@ def _parser(formula):
     formula = formula.strip().replace(' ', '')
     conjunctions = formula.split('},')
     output = []
-
     for conjunction in conjunctions:
         disjunction = conjunction.strip().strip('{').strip('}').split(',')
         output.append(disjunction)
-
     _conjunction = Conjunction()
     for conjunction in output:
         _disjunction = Disjunction()
         for disjunction_literal in conjunction:
             _literal = Literal(disjunction_literal)
             _disjunction.children.append(_literal)
-
         _conjunction.children.append(_disjunction)
-
     return _conjunction
 
 def main():
@@ -222,6 +244,12 @@ def main():
         parsed.process_unit_clauses()
         print("After Processing Unit Clauses:")
         if parsed.find_conflict():
+            # try flipping some decision before UNSAT
+            if parsed.try_flip_last():
+                print("After Flipping Last Decision:")
+                print(parsed)
+                print("-" * 50)
+                continue
             print("UNSATISFIABLE!")
             break
         print(parsed)
@@ -246,12 +274,22 @@ def main():
             print("SATISFIABLE!")
             break
         if any(len(child.children) == 0 for child in parsed.children):
+            if parsed.try_flip_last():
+                print("After Flipping Last Decision:")
+                print(parsed)
+                print("-" * 50)
+                continue
             print("UNSATISFIABLE!")
             break
-        # Perform backtracking
+        # Perform backtracking (decision)
         parsed.backtracing()
         print("After Backtracking:")
         if parsed.find_conflict():
+            if parsed.try_flip_last():
+                print("After Flipping Last Decision:")
+                print(parsed)
+                print("-" * 50)
+                continue
             print("UNSATISFIABLE!")
             break
         print(parsed)

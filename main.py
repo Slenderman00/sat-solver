@@ -4,6 +4,8 @@ import argparse
 class Conjunction:
     def __init__(self):
         self.children = []
+        self.unit_clauses = []
+        self.backtracing_clauses = []
 
     def get_all(self):
         population = []
@@ -13,9 +15,41 @@ class Conjunction:
 
         return population
 
-    def simplify(self):
+    def get_falsifiable_children(self):
+        return [child for child in self.children if not child.always_true]
+
+    def remove_tautologies(self):
+        self.children = self.get_falsifiable_children()
+
+    def clean(self):
+        self.remove_tautologies()
+        for child in self.children:
+            child.remove_false_children()
+
+    def prune(self):
         for child in self.children:
             child.simplify()
+
+    def process_unit_clauses(self):
+        for child in self.children:
+            if child.is_unit_clause():
+                child.set_value(True)
+                child.check_values()
+                self.unit_clauses.append(child.children[0])
+
+        self.propagate_clauses(self.unit_clauses)
+
+    def backtracing(self):
+        self.backtracing_clauses.append(self.children[0].set_value_return_literal(True))
+        self.propagate_clauses(self.backtracing_clauses)
+
+    def propagate_clauses(self, clauses):
+        for child in self.children:
+            child.propagate_clauses(clauses)
+
+    def check_values(self):
+        for child in self.children:
+            child.check_values()
 
     def __str__(self):
         res = ''
@@ -23,9 +57,9 @@ class Conjunction:
             if i == len(self.children) - 1:
                 res += f'{str(child)}'
             else:
-                res += f'{str(child)} and '
+                res += f'{str(child)}, '
 
-        return f'{res}'
+        return f'{{{res}}}'
 
 # or
 class Disjunction:
@@ -36,49 +70,98 @@ class Disjunction:
     def get_all(self):
         return self.children
 
+    def get_falsifiable_children(self):
+        return [child for child in self.children if child.value is True or child.value is None]
+
+    def remove_false_children(self):
+        self.children = self.get_falsifiable_children()
+
+    def is_unit_clause(self):
+        return len(self.children) == 1
+
+    def set_value(self, value):
+        for child in self.children:
+            child.set_value(value)
+
+    def set_value_return_literal(self, value):
+        self.children[0].set_value(value)
+        return self.children[0]
+
     def simplify(self):
         for child in self.children:
             for other in self.children:
                 if child.is_negative_of(other):
                     self.always_true = True
 
+    def check_values(self):
+        for child in self.children:
+            if child.value:
+                self.always_true = True
+                return True
+
+    def propagate_clauses(self, clauses):
+        for child in self.children:
+            child.propagate_clauses(clauses)
+
+
     def __str__(self):
         if self.always_true:
-            return '(True)'
+            return '{True}'
         res = ''
         for i, child in enumerate(self.children):
             if i == len(self.children) - 1:
                 res += f'{str(child)}'
             else:
-                res += f'{str(child)} or '
+                res += f'{str(child)}, '
 
-        return f'({res})'
+        return f'{{{res}}}'
 
 class Literal:
-    def __init__(self, value):
-        self.value = value
-        self.name = None
+    def __init__(self, name):
+        self.variable_value = None
+        self.name = name
         self.negated = None
 
         self.parse()
 
+    @property
+    def value(self):
+        if self.variable_value is None:
+            return None
+        return not self.variable_value if self.negated else self.variable_value
+
+    def set_value(self, value):
+        self.variable_value = value
+
     def is_negative_of(self, other):
-        if other.value == self.value and other.negated != self.negated:
+        if other.name == self.name and other.negated != self.negated:
             return True
         return False
 
-    def parse(self):
-        if '-' in self.value:
-            self.negated = True
-            self.value = self.value.strip('-')
+    def propagate_clauses(self, clauses):
+        for literal in clauses:
+            if literal == self:
+                self.variable_value = literal.variable_value
 
-        self.name = self.value
+    def parse(self):
+        if '-' in self.name:
+            self.negated = True
+            self.name = self.name.strip('-')
 
     def __str__(self):
+        if self.value is not None:
+            if self.value:
+                return 'True'
+            else:
+                return 'False'
+
         if self.negated:
-            return f'not {self.name}'
+            return f'-{self.name}'
         else:
             return self.name
+
+    def __eq__(self, other):
+        return self.name == other.name
 
 def _parser(formula):
     formula = formula.strip().replace(' ', '')
@@ -102,22 +185,69 @@ def _parser(formula):
 
 def main():
     parser = argparse.ArgumentParser("SAT Solver")
-
     parser.add_argument(
         'formula',
         nargs=argparse.REMAINDER,
         help='e.g. {{-a, b}, {-v, r, q}}',
     )
-
     args = parser.parse_args()
     formula = ' '.join(args.formula)
     parsed = _parser(formula)
-    print(f'Solving: {parsed}')
-
-    parsed.simplify()
-
+    print("Solving:")
     print(parsed)
-
+    print("=" * 50)
+    # Start solving
+    while True:
+        print("Current Formula:")
+        print(parsed)
+        print("-" * 50)
+        # Prune the formula
+        parsed.prune()
+        print("After Pruning:")
+        print(parsed)
+        print("-" * 50)
+        # Clean after pruning
+        parsed.clean()
+        print("After Cleaning (Post-Pruning):")
+        print(parsed)
+        print("-" * 50)
+        # Process unit clauses
+        parsed.process_unit_clauses()
+        print("After Processing Unit Clauses:")
+        print(parsed)
+        print("-" * 50)
+        # Clean after processing unit clauses
+        parsed.clean()
+        print("After Cleaning (Post-Unit Clauses):")
+        print(parsed)
+        print("-" * 50)
+        # Check values
+        parsed.check_values()
+        print("After Checking Values:")
+        print(parsed)
+        print("-" * 50)
+        # Clean after checking values
+        parsed.clean()
+        print("After Cleaning (Post-Checking Values):")
+        print(parsed)
+        print("-" * 50)
+        # Check for termination conditions
+        if not parsed.children:
+            print("SATISFIABLE!")
+            break
+        if any(len(child.children) == 0 for child in parsed.children):
+            print("UNSATISFIABLE!")
+            break
+        # Perform backtracking
+        parsed.backtracing()
+        print("After Backtracking:")
+        print(parsed)
+        print("-" * 50)
+        # Clean after backtracking
+        parsed.clean()
+        print("After Cleaning (Post-Backtracking):")
+        print(parsed)
+        print("-" * 50)
 
 if __name__ == "__main__":
     main()

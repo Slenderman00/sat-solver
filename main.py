@@ -15,7 +15,6 @@ class Conjunction:
         for name, val in self.trail:
             m[name] = val
         if include_unassigned:
-            # collect any names still present in the (possibly simplified) formula
             names = set(m)
             for clause in self.children:
                 for lit in clause.children:

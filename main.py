@@ -221,13 +221,11 @@ def main():
         # Process unit clauses
         parsed.process_unit_clauses()
         print("After Processing Unit Clauses:")
-        print(parsed)
-        print("-" * 50)
-
         if parsed.find_conflict():
             print("UNSATISFIABLE!")
             break
-
+        print(parsed)
+        print("-" * 50)
         # Clean after processing unit clauses
         parsed.clean()
         print("After Cleaning (Post-Unit Clauses):")
@@ -253,13 +251,11 @@ def main():
         # Perform backtracking
         parsed.backtracing()
         print("After Backtracking:")
-        print(parsed)
-        print("-" * 50)
-
         if parsed.find_conflict():
             print("UNSATISFIABLE!")
             break
-
+        print(parsed)
+        print("-" * 50)
         # Clean after backtracking
         parsed.clean()
         print("After Cleaning (Post-Backtracking):")

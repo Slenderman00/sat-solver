@@ -8,6 +8,20 @@ class Conjunction:
         self.unit_clauses = []
         self.backtracing_clauses = []
         self._stack = []
+        self.trail = []
+
+    def model(self, include_unassigned=False, default=False):
+        m = {}
+        for name, val in self.trail:
+            m[name] = val
+        if include_unassigned:
+            # collect any names still present in the (possibly simplified) formula
+            names = set(m)
+            for clause in self.children:
+                for lit in clause.children:
+                    names.add(lit.name)
+            return {n: m.get(n, default) for n in sorted(names)}
+        return dict(sorted(m.items()))
 
     def get_all(self):
         population = []
@@ -38,6 +52,7 @@ class Conjunction:
                 child.set_value(True)
                 child.check_values()
                 self.unit_clauses.append(child.children[0])
+                self.trail.append((child.children[0].name, child.children[0].variable_value))
         self.propagate_clauses(self.unit_clauses)
 
     def _pick_clause_index(self):
@@ -54,6 +69,7 @@ class Conjunction:
         self.backtracing_clauses = []
         chosen = self.children[idx].set_value_return_literal(True)
         self.backtracing_clauses.append(chosen)
+        self.trail.append((chosen.name, chosen.variable_value)) 
         self.propagate_clauses(self.backtracing_clauses)
 
     def try_flip_last(self):
@@ -72,6 +88,7 @@ class Conjunction:
                         return True
                 chosen = self.children[idx].set_value_return_literal(False)
                 self.backtracing_clauses.append(chosen)
+                self.trail.append((chosen.name, chosen.variable_value))
                 self.propagate_clauses(self.backtracing_clauses)
                 return True
             else:
@@ -272,6 +289,7 @@ def main():
         # Check for termination conditions
         if not parsed.children:
             print("SATISFIABLE!")
+            print("Model:", parsed.model(include_unassigned=True, default=False))
             break
         if any(len(child.children) == 0 for child in parsed.children):
             if parsed.try_flip_last():

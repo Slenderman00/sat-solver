@@ -1,5 +1,8 @@
 import argparse
 import copy
+import time
+from itertools import product
+import string
 
 # and
 class Conjunction:
@@ -213,6 +216,7 @@ class Literal:
         return self.name == other.name
 
 def _parser(formula):
+    formula = formula.replace('¬', '-')
     formula = formula.strip().replace(' ', '')
     conjunctions = formula.split('},')
     output = []
@@ -228,6 +232,115 @@ def _parser(formula):
         _conjunction.children.append(_disjunction)
     return _conjunction
 
+
+def generate_unsat_formula(n):
+    vars_ = list(string.ascii_lowercase[:n])
+
+    clauses = []
+    for assignment in product([True, False], repeat=n):
+        lits = []
+        for v, val in zip(vars_, assignment):
+            lits.append(f"-{v}" if val else v)
+        clauses.append("{" + ",".join(lits) + "}")
+    return "{" + ",".join(clauses) + "}"
+
+
+def solve(parsed, verbose=True):
+    def vprint(*a, **k):
+        if verbose:
+            print(*a, **k)
+
+    vprint("Solving:")
+    vprint(parsed)
+    vprint("=" * 50)
+
+    while True:
+        vprint("Current Formula:")
+        vprint(parsed)
+        vprint("-" * 50)
+
+        # Prune the formula
+        parsed.prune()
+        vprint("After Pruning:")
+        vprint(parsed)
+        vprint("-" * 50)
+
+        # Clean after pruning
+        parsed.clean()
+        vprint("After Cleaning (Post-Pruning):")
+        vprint(parsed)
+        vprint("-" * 50)
+
+        # Process unit clauses
+        parsed.process_unit_clauses()
+        vprint("After Processing Unit Clauses:")
+        if parsed.find_conflict():
+            if parsed.try_flip_last():
+                vprint("After Flipping Last Decision:")
+                vprint(parsed)
+                vprint("-" * 50)
+                continue
+            vprint("UNSATISFIABLE!")
+            return False, None
+
+        vprint(parsed)
+        vprint("-" * 50)
+
+        # Clean after processing unit clauses
+        parsed.clean()
+        vprint("After Cleaning (Post-Unit Clauses):")
+        vprint(parsed)
+        vprint("-" * 50)
+
+        # Check values
+        parsed.check_values()
+        vprint("After Checking Values:")
+        vprint(parsed)
+        vprint("-" * 50)
+
+        # Clean after checking values
+        parsed.clean()
+        vprint("After Cleaning (Post-Checking Values):")
+        vprint(parsed)
+        vprint("-" * 50)
+
+        # Check for termination conditions
+        if not parsed.children:
+            vprint("SATISFIABLE!")
+            model = parsed.model(include_unassigned=True, default=False)
+            vprint("Model:", model)
+            return True, model
+
+        if any(len(child.children) == 0 for child in parsed.children):
+            if parsed.try_flip_last():
+                vprint("After Flipping Last Decision:")
+                vprint(parsed)
+                vprint("-" * 50)
+                continue
+            vprint("UNSATISFIABLE!")
+            return False, None
+
+        # Perform backtracking (decision)
+        parsed.backtracing()
+        vprint("After Backtracking:")
+        if parsed.find_conflict():
+            if parsed.try_flip_last():
+                vprint("After Flipping Last Decision:")
+                vprint(parsed)
+                vprint("-" * 50)
+                continue
+            vprint("UNSATISFIABLE!")
+            return False, None
+        vprint(parsed)
+        vprint("-" * 50)
+
+        # Clean after backtracking
+        parsed.clean()
+        vprint("After Cleaning (Post-Backtracking):")
+        vprint(parsed)
+        vprint("-" * 50)
+
+
 def main():
     parser = argparse.ArgumentParser("SAT Solver")
     parser.add_argument(
@@ -235,87 +348,43 @@ def main():
         nargs=argparse.REMAINDER,
         help='e.g. {{-a, b}, {-v, r, q}}',
     )
+
+    parser.add_argument(
+        '-b', '--benchmark',
+        type=int,
+        metavar='N',
+        help='run benchmark for n=1..N on the 2^n-clause UNSAT family'
+    )
+
     args = parser.parse_args()
+
+    if args.benchmark is not None:
+        N = args.benchmark
+        if N < 1:
+            raise SystemExit("Benchmark N must be >= 1")
+
+        print(f"Benchmark: classic 2^n-clause UNSAT family (n = 1..{N})")
+        print("-" * 60)
+        print(f"{'n':>2}  {'clauses':>7}  {'result':>6}  {'time':>8}")
+        print("-" * 60)
+
+        for n in range(1, N + 1):
+            cnf_str = generate_unsat_formula(n)
+            parsed = _parser(cnf_str)
+
+            t0 = time.perf_counter()
+            sat, _ = solve(parsed, verbose=False)
+            dt = time.perf_counter() - t0
+
+            result = "SAT" if sat else "UNSAT"
+            print(f"{n:>2}  {2**n:>7}  {result:>6}  {dt:>8.4f}")
+
+        print("-" * 60)
+        return
+
     formula = ' '.join(args.formula)
     parsed = _parser(formula)
-    print("Solving:")
-    print(parsed)
-    print("=" * 50)
-    # Start solving
-    while True:
-        print("Current Formula:")
-        print(parsed)
-        print("-" * 50)
-        # Prune the formula
-        parsed.prune()
-        print("After Pruning:")
-        print(parsed)
-        print("-" * 50)
-        # Clean after pruning
-        parsed.clean()
-        print("After Cleaning (Post-Pruning):")
-        print(parsed)
-        print("-" * 50)
-        # Process unit clauses
-        parsed.process_unit_clauses()
-        print("After Processing Unit Clauses:")
-        if parsed.find_conflict():
-            # try flipping some decision before UNSAT
-            if parsed.try_flip_last():
-                print("After Flipping Last Decision:")
-                print(parsed)
-                print("-" * 50)
-                continue
-            print("UNSATISFIABLE!")
-            break
-        print(parsed)
-        print("-" * 50)
-        # Clean after processing unit clauses
-        parsed.clean()
-        print("After Cleaning (Post-Unit Clauses):")
-        print(parsed)
-        print("-" * 50)
-        # Check values
-        parsed.check_values()
-        print("After Checking Values:")
-        print(parsed)
-        print("-" * 50)
-        # Clean after checking values
-        parsed.clean()
-        print("After Cleaning (Post-Checking Values):")
-        print(parsed)
-        print("-" * 50)
-        # Check for termination conditions
-        if not parsed.children:
-            print("SATISFIABLE!")
-            print("Model:", parsed.model(include_unassigned=True, default=False))
-            break
-        if any(len(child.children) == 0 for child in parsed.children):
-            if parsed.try_flip_last():
-                print("After Flipping Last Decision:")
-                print(parsed)
-                print("-" * 50)
-                continue
-            print("UNSATISFIABLE!")
-            break
-        # Perform backtracking (decision)
-        parsed.backtracing()
-        print("After Backtracking:")
-        if parsed.find_conflict():
-            if parsed.try_flip_last():
-                print("After Flipping Last Decision:")
-                print(parsed)
-                print("-" * 50)
-                continue
-            print("UNSATISFIABLE!")
-            break
-        print(parsed)
-        print("-" * 50)
-        # Clean after backtracking
-        parsed.clean()
-        print("After Cleaning (Post-Backtracking):")
-        print(parsed)
-        print("-" * 50)
+    solve(parsed, True)
 
 if __name__ == "__main__":
     main()
